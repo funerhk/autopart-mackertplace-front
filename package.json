@@ -1,0 +1,1 @@
+{"private":true,"workspaces":["apps/*","packages/*"],"name":"autopart-mackertplace-front","version":"1.0.0","scripts":{"lint:web":"npm run lint -w apps/web","dev:web":"npm run dev -w apps/web","build:web":"npm run build -w apps/web","dev:mobile":"npm run start -w apps/mobile"}}
