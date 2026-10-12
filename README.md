@@ -9,10 +9,12 @@
 3. [Inicio Rápido](#inicio)
 4. [Arquitectura](#arquitectura)
 5. [Pantallas Implementadas](#pantallas)
-6. [Servicios API](#servicios)
-7. [Seguridad y Autenticación](#seguridad)
-8. [Endpoints Documentados vs. Pendientes](#endpoints)
-9. [Escalabilidad](#escalabilidad)
+6. [Flujos Funcionales](#flujos)
+7. [Inventario de Endpoints](./ENDPOINTS.md)
+8. [Servicios API](#servicios)
+9. [Seguridad y Autenticación](#seguridad)
+10. [Endpoints Documentados vs. Pendientes](#endpoints)
+11. [Escalabilidad](#escalabilidad)
 
 ---
 
@@ -104,9 +106,9 @@ autopart-mackertplace-front/
 
 ### Autenticación
 - JWT (Bearer tokens)
-- Refresh token en localStorage
-- Guards de rutas por role (BUYER/SELLER/ADMIN)
-- Zustand para persistencia de sesión
+- Refresh token administrado en memoria por Zustand
+- Guards de rutas por rol (BUYER/SELLER/ADMIN)
+- Zustand para el estado de sesión; la persistencia tras recargar aún no está implementada
 
 ---
 
@@ -135,7 +137,7 @@ npm install
 ```bash
 # Web (development)
 npm run dev:web
-# Abre en http://localhost:3000
+# Abre en http://localhost:3001
 
 # Web (production build)
 npm run build:web
@@ -165,7 +167,7 @@ npm run dev:mobile
 ├─────────────────────────────────────┤
 │   Cliente HTTP (lib/api.ts)         │ Fetch + refresh token automático
 ├─────────────────────────────────────┤
-│   Zustand Store (auth-store)        │ Persiste user + tokens
+│   Zustand Store (auth-store)        │ Gestiona user + tokens
 ├─────────────────────────────────────┤
 │   Tipos Compartidos (@autoparts)    │ Contracts con backend
 └─────────────────────────────────────┘
@@ -208,6 +210,206 @@ npm run dev:mobile
 - **`/products/[id]`** - Detalle producto
 - **`/cart`** - Carrito
 - **`/checkout`** - Pago
+
+---
+
+## <a id="flujos"></a>🔄 Flujos Funcionales
+
+Esta sección describe el comportamiento actual del frontend y separa los flujos implementados, parcialmente implementados y pendientes.
+
+### 1. Entrada al marketplace
+
+1. El usuario entra en `/`.
+2. Se muestran la propuesta de valor y productos destacados.
+3. Los destacados de la página principal son datos estáticos definidos en `app/page.tsx`.
+4. La navegación permite acceder al buscador, solicitudes, panel de vendedor y perfil.
+
+**Estado:** parcialmente implementado; el catálogo todavía no proviene del backend.
+
+### 2. Registro
+
+1. El usuario entra en `/register`.
+2. Completa nombre, apellido, email y contraseña.
+3. Selecciona el rol `BUYER` o `SELLER`.
+4. Si selecciona vendedor, puede indicar el nombre de la empresa.
+5. El formulario valida con Zod y ejecuta `POST /auth/register`.
+
+**Pendientes:** redirección posterior, mensajes de éxito/error y creación automática de sesión.
+
+### 3. Inicio de sesión y sesión
+
+1. El usuario entra en `/login`.
+2. Se validan email y contraseña.
+3. Se ejecuta `POST /auth/login`.
+4. El backend devuelve `access_token`, `refresh_token` opcional y `user`.
+5. Zustand guarda la sesión y el usuario vuelve a `/`.
+6. Las peticiones autenticadas envían `Authorization: Bearer <accessToken>`.
+7. Ante un `401`, `apiFetch` intenta renovar el token; si falla, ejecuta logout.
+
+**Estado:** implementado, pero la sesión se mantiene en memoria y se pierde al recargar la página. No hay persistencia real en localStorage/cookies.
+
+### 4. Protección por roles
+
+- `/buyer/*` permite `BUYER` y `ADMIN`.
+- `/seller/*` permite `SELLER` y `ADMIN`.
+- Un usuario sin sesión es redirigido a `/login`.
+- Un usuario con rol no permitido es redirigido a `/`.
+
+La protección actual se ejecuta en cliente mediante `RoleGuard`. El middleware de Next.js tiene el matcher configurado, pero actualmente no realiza validación de sesión.
+
+### 5. Búsqueda y detalle de productos
+
+1. El usuario entra en `/search`.
+2. Se consulta `useProducts`.
+3. Puede buscar por título o descripción y filtrar por categoría.
+4. Los resultados se filtran localmente y se muestran con `ProductCard`.
+5. La ruta `/products/[id]` está preparada para mostrar el detalle.
+
+**Estado:** incompleto. `productsService.list()` devuelve `[]`, `getById()` devuelve `null` y las tarjetas no enlazan todavía al detalle.
+
+### 6. Solicitudes del comprador
+
+1. El comprador accede a `/buyer/requests`.
+2. Se consulta `GET /requests` con autenticación.
+3. Se muestran sus solicitudes mediante `RequestCard`.
+4. El servicio también soporta `POST /requests`, pero no existe todavía una pantalla para crear la solicitud.
+
+**Estado:** listado implementado; creación, edición, cancelación y gestión de ofertas pendientes.
+
+### 7. Solicitudes disponibles para vendedores
+
+1. El vendedor accede a `/seller/requests`.
+2. Actualmente se reutiliza temporalmente `GET /requests`.
+3. Las solicitudes se muestran mediante `RequestCard`.
+
+**Advertencia:** no existe aún un endpoint específico de solicitudes públicas/disponibles para vendedores. Por ello, el resultado puede no representar correctamente el marketplace.
+
+### 8. Cotizaciones y ofertas
+
+1. El vendedor entra en `/seller/quotes/new`.
+2. Introduce el ID de una solicitud, precio, descripción, condición y días estimados de entrega.
+3. El frontend ejecuta `POST /offers`.
+4. El servicio también soporta `GET /offers/request/{id}` para consultar ofertas por solicitud.
+
+**Pendientes:** seleccionar solicitudes desde la interfaz, listar ofertas al comprador, comparar ofertas, aceptar una oferta y convertirla en orden.
+
+### 9. Carrito, checkout y pago
+
+El flujo previsto es:
+
+```text
+Detalle de producto
+  → Agregar al carrito
+  → Revisar carrito
+  → Checkout
+  → Procesar pago
+  → Crear orden
+  → Confirmar compra
+```
+
+Actualmente `/cart` y `/checkout` son placeholders. No existen store de carrito, endpoints de carrito, integración de pagos ni creación de órdenes desde checkout.
+
+**Estado:** no implementado.
+
+### 10. Pedidos y ventas
+
+- `/buyer/orders` consulta `GET /orders` y muestra los pedidos del comprador.
+- `/seller/sales` reutiliza el mismo servicio para mostrar ventas del vendedor.
+- `ordersService` soporta `PATCH /orders/{id}/status` con estados `PENDING`, `PAID`, `SHIPPED`, `DELIVERED` y `CANCELLED`.
+
+**Pendientes:** acciones para actualizar estados, historial de cambios, cancelación, confirmación de entrega y validación de filtros específicos por rol.
+
+### 11. Perfil
+
+1. `/profile` obtiene el usuario desde Zustand.
+2. Si no hay sesión, solicita iniciar sesión.
+3. Si hay sesión, muestra nombre, email y rol.
+
+**Estado:** solo lectura local. `usersService.me()` aún devuelve `null`; no existe edición de perfil ni cambio de contraseña.
+
+### 12. Notificaciones y chat
+
+El proyecto ya define servicios y endpoints para:
+
+- `GET /notifications`.
+- `PATCH /notifications/{id}/read`.
+- `GET /chat/rooms/{requestId}`.
+- `GET /chat/rooms/{roomId}/messages`.
+
+Sin embargo, todavía no hay pantallas para mostrar notificaciones, marcar mensajes como leídos, abrir conversaciones, enviar mensajes o gestionar comunicación en tiempo real con Socket.IO.
+
+**Estado:** servicios preparados; interfaz pendiente.
+
+### 13. Operación del vendedor
+
+Las rutas disponibles son:
+
+- `/seller/dashboard`: indicadores actualmente estáticos.
+- `/seller/products/new`: placeholder para publicar productos.
+- `/seller/inventory`: placeholder para inventario y stock.
+- `/seller/stats`: placeholder para métricas.
+- `/seller/requests`: listado temporal de solicitudes.
+- `/seller/quotes/new`: creación básica de ofertas.
+- `/seller/sales`: listado básico de órdenes.
+
+**Estado:** dashboard y navegación visuales; publicación, inventario y estadísticas requieren endpoints y UI.
+
+### 14. Aplicación móvil
+
+`apps/mobile` es un scaffold de Expo. Actualmente muestra información introductoria para compradores y vendedores y configura React Query, pero no tiene navegación, autenticación ni flujos conectados al backend.
+
+### Resumen del flujo B2C esperado
+
+```text
+Buscar producto
+  → Ver detalle
+  → Agregar al carrito
+  → Checkout
+  → Pago
+  → Crear orden
+  → Envío
+  → Entrega
+```
+
+Este flujo requiere implementar productos, carrito, checkout, pagos y creación de órdenes.
+
+### Resumen del flujo B2B por solicitudes
+
+```text
+Comprador crea solicitud
+  → Vendedores consultan solicitudes disponibles
+  → Vendedores envían ofertas
+  → Comprador compara ofertas
+  → Comprador acepta una oferta
+  → Se crea una orden
+  → Se actualiza el estado hasta la entrega
+```
+
+En el estado actual solo están disponibles el listado de solicitudes, la creación básica de ofertas y la consulta básica de órdenes.
+
+### Matriz de estado funcional
+
+| Flujo | Estado actual |
+|---|---|
+| Home y navegación | Parcial; destacados estáticos |
+| Registro | Petición implementada; UX incompleta |
+| Login | Implementado; sesión no persistida |
+| Refresh token | Implementado |
+| Guards por rol | Cliente implementado; middleware pendiente |
+| Búsqueda de productos | UI implementada; servicio devuelve lista vacía |
+| Detalle de producto | Placeholder |
+| Solicitudes del comprador | Listado implementado; creación UI pendiente |
+| Solicitudes del vendedor | Temporal; endpoint no específico |
+| Cotizaciones | Creación básica implementada |
+| Comparar/aceptar ofertas | Pendiente |
+| Carrito | Pendiente |
+| Checkout y pagos | Pendiente |
+| Pedidos | Consulta implementada; acciones pendientes |
+| Inventario/publicación | Pendiente |
+| Perfil | Lectura local |
+| Notificaciones | Servicio sin UI |
+| Chat | REST preparado; UI y tiempo real pendientes |
+| Mobile | Scaffold inicial |
 
 ---
 
@@ -446,13 +648,14 @@ npm run build:web  # Next.js valida tipos automáticamente
 
 ## 📝 Notas Importante
 
-- ✅ **Arquitectura completada**: Todas las pantallas, hooks, servicios diseñados
-- ✅ **Tipos compartidos**: `packages/shared` exports a web y mobile
-- ✅ **Seguridad**: Role guards, refresh token, JWT ready
-- ✅ **Lint**: Proyecto pasa ESLint (3 warnings menores ignorables)
-- ⏳ **Chat en vivo**: Socket.io configurado en TESTING_GUIDE, necesita implementar listeners
-- ⏳ **Mobile**: Base scaffold Expo lista, comparte servicios con web
-- ❌ **Backend**: Endpoints productos, usuarios, carrito, pagos NO están en TESTING_GUIDE
+- ✅ **Arquitectura base**: Capas de páginas, componentes, hooks, servicios y tipos compartidos
+- ✅ **Tipos compartidos**: `packages/shared` exporta contratos para web y mobile
+- ✅ **Autenticación base**: Login, JWT, refresh token y guards de rol implementados
+- ⏳ **Persistencia de sesión**: La sesión actual se mantiene en memoria y se pierde al recargar
+- ⏳ **Marketplace**: Productos, detalle, carrito, checkout y pagos aún requieren implementación
+- ⏳ **Chat y notificaciones**: Servicios/endpoints preparados, interfaz pendiente
+- ⏳ **Mobile**: Scaffold Expo inicial, todavía sin navegación ni flujos conectados
+- ❌ **Backend faltante**: Endpoints de productos, usuarios, carrito y pagos no están definidos en `TESTING_GUIDE`
 
 ---
 

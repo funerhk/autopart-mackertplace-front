@@ -10,10 +10,16 @@ export const endpoints = {
   requests: {
     listMine: "/requests",
     create: "/requests",
+    listPublic: "/requests/public",
+    byCity: (city: string) => `/requests/public?city=${encodeURIComponent(city)}`,
   },
   offers: {
     create: "/offers",
     byRequest: (requestId: string) => `/offers/request/${requestId}`,
+  },
+  products: {
+    list: "/products",
+    byId: (id: string) => `/products/${id}`,
   },
   notifications: {
     list: "/notifications",

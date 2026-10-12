@@ -34,6 +34,7 @@ export interface PartRequest {
   category: string;
   partNumber?: string;
   vehicleInfo: VehicleInfo;
+  location?: string;
   createdAt?: string;
 }
 
@@ -54,6 +55,8 @@ export interface Notification {
   title?: string;
   message: string;
   read: boolean;
+  requestId?: string;
+  type?: "OFFER" | "INTEREST" | "VIEW" | "ORDER";
   createdAt?: string;
 }
 
